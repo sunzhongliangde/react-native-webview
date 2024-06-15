@@ -15,6 +15,7 @@ _This guide is currently a work in progress._
 - [Add support for File Download](Guide.md#add-support-for-file-download)
 - [Communicating between JS and Native](Guide.md#communicating-between-js-and-native)
 - [Working with custom headers, sessions, and cookies](Guide.md#working-with-custom-headers-sessions-and-cookies)
+- [Page navigation gesture and button support](Guide.md#page-navigation-gesture-and-button-support)
 
 ### Basic inline HTML
 
@@ -55,7 +56,7 @@ class MyWeb extends Component {
 
 ### Loading local HTML files
 
-Note: This is currently not working as discussed in [#428](https://github.com/react-native-webview/react-native-webview/issues/428) and [#518](https://github.com/react-native-webview/react-native-webview/issues/518). Possible workarounds include bundling all assets with webpack or similar, or running a [local webserver](https://github.com/futurepress/react-native-static-server).
+Note: This is currently not working as discussed in [#428](https://github.com/react-native-webview/react-native-webview/issues/428) and [#518](https://github.com/react-native-webview/react-native-webview/issues/518). Possible workarounds include bundling all assets with webpack or similar, or running a [local webserver](https://github.com/birdofpreyru/react-native-static-server).
 
 <details><summary>Show non-working method</summary>
 
@@ -197,13 +198,22 @@ Add permission in AndroidManifest.xml:
 
 If the file input indicates that images or video is desired with [`accept`](https://developer.mozilla.org/en-US/docs/Web/HTML/Element/input/file#accept), then the WebView will attempt to provide options to the user to use their camera to take a picture or video.
 
+Additionally, if the user- or environment-facing camera is specified with the [`capture`](https://developer.mozilla.org/en-US/docs/Web/HTML/Element/input/file#capture) attribute, the following must be added to the AndroidManifest.xml file for the camera to function consistently on some Android versions and devices:
+```xml
+<queries>
+    <intent>
+        <action android:name="android.media.action.IMAGE_CAPTURE" />
+    </intent>
+</queries>
+```
+
 Normally, apps that do not have permission to use the camera can prompt the user to use an external app so that the requesting app has no need for permission. However, Android has made a special exception for this around the camera to reduce confusion for users. If an app _can_ request the camera permission because it has been declared, and the user has not granted the permission, it may not fire an intent that would use the camera (`MediaStore.ACTION_IMAGE_CAPTURE` or `MediaStore.ACTION_VIDEO_CAPTURE`). In this scenario, it is up to the developer to request camera permission before a file upload directly using the camera is necessary.
 
 ##### Check for File Upload support, with `static isFileUploadSupported()`
 
 File Upload using `<input type="file" />` is not supported for Android 4.4 KitKat (see [details](https://github.com/delight-im/Android-AdvancedWebView/issues/4#issuecomment-70372146)):
 
-```
+```jsx
 import { WebView } from "react-native-webview";
 
 WebView.isFileUploadSupported().then(res => {
@@ -215,6 +225,14 @@ WebView.isFileUploadSupported().then(res => {
 });
 
 ```
+
+##### MacOS
+
+Add read access for `User Selected File` in `Signing & Capabilities` tab under `App Sandbox`:
+
+<img width="856" alt="settings screenshot" src="https://user-images.githubusercontent.com/36531255/200541359-dde130d0-169e-4b58-8b2f-205442d76fdd.png">
+
+Note: Attempting to open a file input without this permission will crash the webview.
 
 ### Multiple Files Upload
 
@@ -259,7 +277,7 @@ To be able to save images to the gallery you need to specify this permission in 
 ##### Android
 
 On Android, integration with the DownloadManager is built-in.
-Add this permisison in AndroidManifest.xml (only required if your app supports Android versions lower than 10):
+Add this permission in AndroidManifest.xml (only required if your app supports Android versions lower than 10):
 
 ```xml
 <manifest ...>
@@ -323,6 +341,7 @@ _Under the hood_
 
 > On iOS, ~~`injectedJavaScript` runs a method on WebView called `evaluateJavaScript:completionHandler:`~~ – this is no longer true as of version `8.2.0`. Instead, we use a `WKUserScript` with injection time `WKUserScriptInjectionTimeAtDocumentEnd`. As a consequence, `injectedJavaScript` no longer returns an evaluation value nor logs a warning to the console. In the unlikely event that your app depended upon this behaviour, please see migration steps [here](https://github.com/react-native-webview/react-native-webview/pull/1119#issuecomment-574919464) to retain equivalent behaviour.
 > On Android, `injectedJavaScript` runs a method on the Android WebView called `evaluateJavascriptWithFallback`
+> On Windows, `injectedJavaScript` runs a method on the WinRT/C++ WebView called `InvokeScriptAsync`
 
 #### The `injectedJavaScriptBeforeContentLoaded` prop
 
@@ -355,11 +374,59 @@ export default class App extends Component {
 
 This runs the JavaScript in the `runFirst` string before the page is loaded. In this case, the value of `window.isNativeApp` will be set to true before the web code executes.
 
+> **Warning**
+> On Android, this may work, but it is not 100% reliable (see [#1609](https://github.com/react-native-webview/react-native-webview/issues/1609) and [#1099](https://github.com/react-native-webview/react-native-webview/pull/1099)). Consider using `injectedJavaScriptObject` instead.
+
 By setting `injectedJavaScriptBeforeContentLoadedForMainFrameOnly: false`, the JavaScript injection will occur on all frames (not just the top frame) if supported for the given platform. However, although support for `injectedJavaScriptBeforeContentLoadedForMainFrameOnly: false` has been implemented for iOS and macOS, [it is not clear](https://github.com/react-native-webview/react-native-webview/pull/1119#issuecomment-600275750) that it is actually possible to inject JS into iframes at this point in the page lifecycle, and so relying on the expected behaviour of this prop when set to `false` is not recommended.
 
 > On iOS, ~~`injectedJavaScriptBeforeContentLoaded` runs a method on WebView called `evaluateJavaScript:completionHandler:`~~ – this is no longer true as of version `8.2.0`. Instead, we use a `WKUserScript` with injection time `WKUserScriptInjectionTimeAtDocumentStart`. As a consequence, `injectedJavaScriptBeforeContentLoaded` no longer returns an evaluation value nor logs a warning to the console. In the unlikely event that your app depended upon this behaviour, please see migration steps [here](https://github.com/react-native-webview/react-native-webview/pull/1119#issuecomment-574919464) to retain equivalent behaviour.
 > On Android, `injectedJavaScript` runs a method on the Android WebView called `evaluateJavascriptWithFallback`
 > Note on Android Compatibility: For applications targeting `Build.VERSION_CODES.N` or later, JavaScript state from an empty WebView is no longer persisted across navigations like `loadUrl(java.lang.String)`. For example, global variables and functions defined before calling `loadUrl(java.lang.String)` will not exist in the loaded page. Applications should use the Android Native API `addJavascriptInterface(Object, String)` instead to persist JavaScript objects across navigations.
+
+
+#### The `injectedJavaScriptObject` prop
+
+Due to the Android race condition mentioned above, this more reliable prop was added. While you cannot execute arbitrary JavaScript, you can make an arbitrary JS object available to the JS run in the webview prior to the page load completing.
+
+```html
+<html>
+  <head>
+    <script>
+      window.onload = (event) => {
+        if (window.ReactNativeWebView.injectedObjectJson()) {
+          document.getElementById('output').innerHTML = JSON.parse(window.ReactNativeWebView.injectedObjectJson()).customValue;
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <p id="output">undefined</p>
+  </body>
+</html>
+```
+
+Note: `ReactNativeWebView.injectedObjectJson()` returns the JSON encoded object passed in to `injectedJavaScriptObject`. It must be passed to `JSON.parse` before its properties can be accessed (but it may be `undefined`!).
+
+```jsx
+import React, { Component } from 'react';
+import { View } from 'react-native';
+import { WebView } from 'react-native-webview';
+
+export default class App extends Component {
+  render() {
+    return (
+      <View style={{ flex: 1 }}>
+        <WebView
+          source={{
+            html: HTML
+          }}
+          injectedJavaScriptObject={{ customValue: 'myCustomValue' }}
+        />
+      </View>
+    );
+  }
+}
+```
 
 #### The `injectJavaScript` method
 
@@ -469,7 +536,7 @@ In React Native WebView, you can set a custom header like this:
 
 This will set the header on the first load, but not on subsequent page navigations.
 
-In order to work around this, you can track the current URL, intercept new page loads, and navigate to them yourself ([original credit for this technique to Chirag Shah from Big Binary](https://blog.bigbinary.com/2016/07/26/passing-request-headers-on-each-webview-request-in-react-native.html)):
+In order to work around this, you can track the current URL, intercept new page loads, and navigate to them yourself ([original credit for this technique to Chirag Shah from Big Binary](https://www.bigbinary.com/blog/passing-request-headers-on-each-webview-request-in-react-native)):
 
 ```jsx
 const CustomHeaderWebView = (props) => {
@@ -504,7 +571,7 @@ const CustomHeaderWebView = (props) => {
 
 #### Managing Cookies
 
-You can set cookies on the React Native side using the [@react-native-community/cookies](https://github.com/react-native-community/cookies) package.
+You can set cookies on the React Native side using the [@react-native-cookies/cookies](https://github.com/react-native-cookies/cookies) package.
 
 When you do, you'll likely want to enable the [sharedCookiesEnabled](Reference.md#sharedCookiesEnabled) prop as well.
 
@@ -539,6 +606,52 @@ const App = () => {
 
 Note that these cookies will only be sent on the first request unless you use the technique above for [setting custom headers on each page load](#Setting-Custom-Headers).
 
+### Page navigation gesture and button support
+We can provide support for conventional mobile page navigation: forward/back swipe gestures on iOS and the hardware back button/gesture on Android.
+
+For iOS, you'll just need to use the [`allowsbackforwardnavigationgestures`](Reference.md#allowsbackforwardnavigationgestures) prop.
+
+For Android, you need to use `BackHandler.addEventListener` and hook that up to call `goBack` on the `WebView`.
+
+With functional React components, you can use `useRef` and `useEffect` (you'll need to import them from React if you aren't already) to allow users to navigate to the previous page when they press the back button like so:
+```jsx
+import React, {
+    useEffect,
+    useRef,
+} from 'react';
+import {
+    BackHandler,
+    Platform,
+} from 'react-native';
+```
+
+```jsx
+const webViewRef = useRef(null);
+const onAndroidBackPress = () => {
+  if (webViewRef.current) {
+    webViewRef.current.goBack();
+    return true; // prevent default behavior (exit app)
+  }
+  return false;
+};
+
+useEffect(() => {
+  if (Platform.OS === 'android') {
+    BackHandler.addEventListener('hardwareBackPress', onAndroidBackPress);
+    return () => {
+      BackHandler.removeEventListener('hardwareBackPress', onAndroidBackPress);
+    };
+  }
+}, []);
+```
+
+And add this prop to your `WebView` component:
+```jsx
+<WebView
+  ref={webViewRef}
+/>
+```
+
 ### Hardware Silence Switch
 
 There are some inconsistencies in how the hardware silence switch is handled between embedded `audio` and `video` elements and between iOS and Android platforms.
@@ -546,3 +659,10 @@ There are some inconsistencies in how the hardware silence switch is handled bet
 Audio on `iOS` will be muted when the hardware silence switch is in the on position, unless the `ignoreSilentHardwareSwitch` parameter is set to true.
 
 Video on `iOS` will always ignore the hardware silence switch.
+
+## Translations
+
+This file is available in:
+
+- [Brazilian portuguese](Guide.portuguese.md)
+- [Italian](Guide.italian.md)

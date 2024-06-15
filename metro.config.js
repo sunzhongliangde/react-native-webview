@@ -1,12 +1,21 @@
-/**
- * This cli config is needed for development purposes, e.g. for running
- * integration tests during local development or on CI services.
- */
+const path = require('path');
 
-const blacklist = require('metro-config/src/defaults/blacklist');
-
-module.exports = {
+const { makeMetroConfig } = require('@rnx-kit/metro-config');
+module.exports = makeMetroConfig({
+  projectRoot: path.join(__dirname, 'example'),
+  watchFolders: [__dirname],
   resolver: {
-    blacklistRE: blacklist([/node_modules\/react-native-macos\/.*/])
+    resolverMainFields: ['main-internal', 'browser', 'main'],
+    extraNodeModules: {
+      'react-native-webview': __dirname,
+    },
   },
-};
+  transformer: {
+    getTransformOptions: async () => ({
+      transform: {
+        experimentalImportSupport: false,
+        inlineRequires: false,
+      },
+    }),
+  },
+});

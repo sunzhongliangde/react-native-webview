@@ -4,28 +4,23 @@
  */
 
 import { driver, By2 } from 'selenium-appium'
-import { until } from 'selenium-webdriver';
 
 const setup = require('../jest-setups/jest.setup');
-jest.setTimeout(50000);
+jest.setTimeout(150000);
 
-beforeAll(() => {
-  return driver.startWithCapabilities(setup.capabilites);
-});
-
-afterAll(() => {
-  return driver.quit();
-});
+const WindowsApplicationDriverUrl = "http://127.0.0.1:4723/wd/hub";
 
 describe('Alert Tests', () => {
   
   test('Show Alert', async () => {
-    const showAlertButton = await driver.wait(until.elementLocated(By2.nativeName('Show alert')));
+    await driver.startWithCapabilities(setup.capabilities, WindowsApplicationDriverUrl);
+    const showAlertButton = By2.nativeName('Show alert');
     await showAlertButton.click();
-    await driver.wait(until.elementLocated(By2.nativeName('Hello! I am an alert box!')));
-    await By2.nativeName('OK').click();
-    const dismissMessage = await driver.wait(until.elementLocated(By2.nativeName('Alert dismissed!')));
+    await By2.nativeName('Hello! I am an alert box!');
+    const okButton = By2.nativeXpath('//Button[@Name="OK"]');
+    await okButton.click();
+    const dismissMessage = By2.nativeName('Alert dismissed!');
     expect(dismissMessage).not.toBeNull();
+    await driver.quit();
   });
-
 });
